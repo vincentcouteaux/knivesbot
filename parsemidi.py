@@ -64,15 +64,32 @@ def chords2_1hot(midi_file):
             pianoroll_slice[prev_index] = 1.
     return out
 
-def sync_bass_chords_solo(roll_bass, roll_chords, roll_solo):
-    """ TODO concatenate the 3 rolls into 1. Starts from the first note of the bass,
-    to the last note of the solo. continue the last chord if the solo last longer """
+def trim(roll_bass, roll_chords, roll_solo):
+    """ sometimes the midi file does not start from zeros, so we trim
+    what comes before, and we continue the last chord for the bass and chords
+    until the last solo note """
     first_non_void = np.argmax(roll_bass.any(1))
     bass_padded = np.pad(roll_bass[first_non_void:],
                          ((0, roll_solo.shape[0] - roll_bass.shape[0]), (0, 0)), 'edge')
     chords_padded = np.pad(roll_chords[first_non_void:],
                            ((0, roll_solo.shape[0] - roll_chords.shape[0]), (0, 0)), 'edge')
-    return np.concatenate((bass_padded, chords_padded, roll_solo[first_non_void:]), 1)
+    return bass_padded, chords_padded, roll_solo[first_non_void:]
+
+def sync_bass_chords_solo(roll_bass, roll_chords, roll_solo):
+    r""" Concatenate the 3 rolls into 1. The piano rolls must already be trimmed.
+    /!\ /!\ The solo is delayed by one box since the input contains the previous
+    note played /!\ /!\ """
+    #first_non_void = np.argmax(roll_bass.any(1))
+    #bass_padded = np.pad(roll_bass[first_non_void:],
+    #                     ((0, roll_solo.shape[0] - roll_bass.shape[0]), (0, 0)), 'edge')
+    #chords_padded = np.pad(roll_chords[first_non_void:],
+    #                       ((0, roll_solo.shape[0] - roll_chords.shape[0]), (0, 0)), 'edge')
+    #if first_non_void > 0:
+    #    return np.concatenate((bass_padded, chords_padded, roll_solo[first_non_void-1:-1]), 1)
+    blank_note = np.zeros((1, 49))
+    blank_note[0, -1] = 1.
+    return np.concatenate((roll_bass, roll_chords, 
+                        np.concatenate((blank_note, roll_solo[:-1]))), 1)
 
 def get_input(name):
     """! """
@@ -82,8 +99,35 @@ def get_input(name):
     roll_solo = melody_midi2_1hot(solo_file)
     roll_bass = chords2_1hot(bass_file)
     roll_chords = chords2_1hot(chords_file)
-    return sync_bass_chords_solo(roll_bass, roll_chords, roll_solo)
+    return roll_bass, roll_chords, roll_solo
+    #return sync_bass_chords_solo(roll_bass, roll_chords, roll_solo)
 
+def all_transpositions(rolls, solo=False):
+    """! return a list of all the transpositions of the piano rolls.
+    Solo piano rolls are special because there last slot is 1 if no note is played, 
+    therefore must not be transpose"""
+    out = [np.zeros(rolls.shape) for i in range(12)]
+    for i, slice_ in enumerate(rolls):
+        for transp in range(12):
+            if solo:
+                out[transp][i, :-1] = np.roll(slice_[:-1], transp)
+                out[transp][i, -1] = slice_[-1]
+            else:
+                out[transp][i] = np.roll(slice_, transp)
+    #out.append(rolls)
+    return out
+
+def sync_with_all_transp(roll_bass, roll_chords, roll_solo):
+    """ apply all_transpositions to the 2 rolls, and concatenate them with
+    sync_bass_chords_solo """
+    roll_bass, roll_chords, roll_solo = trim(roll_bass, roll_chords, roll_solo)
+    all_bass = all_transpositions(roll_bass, False)
+    all_chords = all_transpositions(roll_chords, False)
+    all_solo = all_transpositions(roll_solo, True)
+    all_sync = []
+    for i in range(12):
+        all_sync.append(sync_bass_chords_solo(all_bass[i], all_chords[i], all_solo[i]))
+    return all_sync, all_solo
 
 def get_bpm(midi_file):
     """! returns the tempo in beat per minute, of a midi file """
@@ -123,7 +167,18 @@ if __name__ == "__main__":
         for slice_ in  piano_roll:
             print(slice_)
     def sync():
-        X = get_input('mididb/youdBeSo')
-        for x in X:
-            print x
+        X_bass, X_chords, X_solo = get_input('mididb/allTheThings')
+        print(X_solo.shape, X_bass.shape)
+        for x in X_chords:
+            print(x)
+        #X_solo[-2] = 0
+        #X_solo[-2, -1] = 1
+        all_transp_X, all_y = sync_with_all_transp(X_bass, X_chords, X_solo)
+        for i, transp in enumerate(all_transp_X):
+            print("Input: ")
+            print(transp)
+            print("Output: ")
+            print(all_y[i].shape)
+            print(all_y[i])
+            print("\n")
     sync()

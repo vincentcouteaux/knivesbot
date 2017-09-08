@@ -1,3 +1,6 @@
 *.mid
+*.pyc
+*.h5
+logs
 .DS_Store
 *.swp
