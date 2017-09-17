@@ -129,6 +129,19 @@ def sync_with_all_transp(roll_bass, roll_chords, roll_solo):
         all_sync.append(sync_bass_chords_solo(all_bass[i], all_chords[i], all_solo[i]))
     return all_sync, all_solo
 
+def sync_all_transp_bass_chords(roll_bass, roll_chords, roll_solo):
+    """ concatenate only the bass and the chords, and does not delay the solo.
+    This is the the training setting where only the bass and chords are input
+    of the network """
+    roll_bass, roll_chords, roll_solo = trim(roll_bass, roll_chords, roll_solo)
+    all_bass = all_transpositions(roll_bass, False)
+    all_chords = all_transpositions(roll_chords, False)
+    all_solo = all_transpositions(roll_solo, True)
+    all_sync = []
+    for i in range(12):
+        all_sync.append(np.concatenate((all_bass[i], all_chords[i]), 1))
+    return all_sync, all_solo
+
 def get_bpm(midi_file):
     """! returns the tempo in beat per minute, of a midi file """
     return 60000000/get_tempo(midi_file)
