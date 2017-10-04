@@ -1,4 +1,5 @@
 """ This module transform the midi file into inputs to the neural network """
+from __future__ import print_function
 import mido
 import numpy as np
 
@@ -29,33 +30,55 @@ def absolute_note_on(midi_file):
             sheet.append(OnsetEvent((abs_time)/tempo, msg.note))
     return sheet
 
-def quantify2eights(sheet):
-    """ quantify to 1/8th a sheet as output by absolute_note_on """
-    out = np.zeros(int(round(2*sheet[-1].time))+1) - 1
+def quantify(sheet, rythm):
+    """ quantify a sheet as output by absolute_note_on.
+    @param rythm (1, 2, 4, 8, 16...) 1/rythm at witch to quantify"""
+    out = np.zeros(int(round((rythm/4.)*sheet[-1].time))+1) - 1
     for event in sheet:
-        out[int(round(2*event.time))] = event.note
+        out[int(round((rythm/4.)*event.time))] = event.note
     return out
 
-def melody_midi2_1hot(midi_file):
+def quantify2eights(sheet):
+    """ quantify to 1/8th a sheet as output by absolute_note_on """
+    return quantify(sheet, 8)
+
+def quantify2quarters(sheet):
+    """ quantify to 1/8th a sheet as output by absolute_note_on """
+    return quantify(sheet, 4)
+
+def melody_midi2_1hot(midi_file, quant=8):
     """ return a piano roll-like numpy array """
-    eights = quantify2eights(absolute_note_on(midi_file)).astype(int)
-    out = np.zeros((eights.shape[0], 49)).astype(int) #48 is for octave + 1 for no note
+    eights = quantify(absolute_note_on(midi_file), quant).astype(int)
+    out = np.zeros((eights.shape[0], 49)).astype(int) #48 is four octave + 1 for no note
     for i, note in enumerate(eights):
         if note == -1:
             out[i, 48] = 1
         else:
-            out[i, (note - 48)%49] = 1
+            #out[i, (note - 48)%49] = 1
+            out[i, (note - 48)%48] = 1 # 48 makes more sense right ?
     return out
 
-def chords2_1hot(midi_file):
+def walking_midi2_1hot(midi_file, quant=4):
+    """ same, but in the bass range """
+    quarters = quantify(absolute_note_on(midi_file), quant).astype(int)
+    out = np.zeros((quarters.shape[0], 37)).astype(int) #37 is four octave + 1 for no note
+    for i, note in enumerate(quarters):
+        #print(note)
+        if note == -1:
+            out[i, 36] = 1
+        else:
+            out[i, (note - 36)%36] = 1 #not sure if 24 or 12
+    return out
+
+def chords2_1hot(midi_file, quant=8):
     """ return the piano roll of the bass or the chord.
         we don't care about the octave, so we return a
         (len(midi_file), 12) sized np array. Also, no rest, a note is held until
         a new one appears """
     sheet = absolute_note_on(midi_file)
-    out = np.zeros((int(round(2*sheet[-1].time))+1, 12))
+    out = np.zeros((int(round((quant/4.)*sheet[-1].time))+1, 12))
     for event in sheet:
-        out[int(round(2*event.time)), event.note%12] = 1.
+        out[int(round((quant/4.)*event.time)), event.note%12] = 1.
     prev_index = []
     for pianoroll_slice in out:
         if pianoroll_slice.any():
@@ -91,14 +114,18 @@ def sync_bass_chords_solo(roll_bass, roll_chords, roll_solo):
     return np.concatenate((roll_bass, roll_chords, 
                         np.concatenate((blank_note, roll_solo[:-1]))), 1)
 
-def get_input(name):
+def get_input(name, quant=8, walking_bass=False):
     """! """
     bass_file = mido.MidiFile(name + '_bass.mid')
     chords_file = mido.MidiFile(name + '_chords.mid')
-    solo_file = mido.MidiFile(name + '_solo.mid')
-    roll_solo = melody_midi2_1hot(solo_file)
-    roll_bass = chords2_1hot(bass_file)
-    roll_chords = chords2_1hot(chords_file)
+    suffix = '_walking.mid' if walking_bass else '_solo.mid'
+    solo_file = mido.MidiFile(name + suffix)
+    if not walking_bass:
+        roll_solo = melody_midi2_1hot(solo_file, quant)
+    else:
+        roll_solo = walking_midi2_1hot(solo_file, quant)
+    roll_bass = chords2_1hot(bass_file, quant)
+    roll_chords = chords2_1hot(chords_file, quant)
     return roll_bass, roll_chords, roll_solo
     #return sync_bass_chords_solo(roll_bass, roll_chords, roll_solo)
 
@@ -152,8 +179,8 @@ def get_tempo(midi_file):
         if msg.type == 'set_tempo':
             return msg.tempo
 
-NOTE2STR = {0: 'C', 1:'C#', 2:'D', 3:'Eb', 4:'E', 5:'F', 6:'F#',
-            7:'G', 8:'G#', 9:'A', 10:'Bb', 11:'B'}
+NOTE2STR = {0: 'C ', 1:'C#', 2:'D ', 3:'Eb', 4:'E ', 5:'F ', 6:'F#',
+            7:'G ', 8:'G#', 9:'A ', 10:'Bb', 11:'B '}
 def midi_note2str(midi_note):
     """ return the name of the midi note """
     if midi_note < 0:
@@ -194,4 +221,8 @@ if __name__ == "__main__":
             print(all_y[i].shape)
             print(all_y[i])
             print("\n")
-    sync()
+    def walking():
+        roll_bass, roll_chords, roll_walk = get_input('mididb/greenDolphin', 4, True)
+        print(np.argmax(roll_walk[:20], 1))
+        pass
+    walking()

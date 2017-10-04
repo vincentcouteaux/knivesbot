@@ -69,9 +69,11 @@ def test_chords():
     return [[bass_Cmaj, chords_Cmaj], [bass_Fsmaj, chords_Fsmaj],
             [bass_iiVI_Gmaj, chords_iiVI_Gmaj], [bass_iiVI_Abmaj, chords_iiVI_Abmaj]]
 
-TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/test_db/giantSteps'))
+#TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/test_db/giantSteps'))
+TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/test_db/bebopBlues'))
 #TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/test_db/takeTheATrain'))
-#TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/greenDolphin'))
+#TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/allTheThings'))
+#TEST_BASS, TEST_CHORDS, _ = trim(*get_input('mididb/youdBeSo'))
 ROLLS = test_chords()
 class GenMelody(Callback):
     def on_epoch_end(self, epoch, logs={}):
